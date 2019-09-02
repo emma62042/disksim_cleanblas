@@ -126,7 +126,7 @@ ssdmodel_ssd SSD {
 
      # vp - min percentage of free blocks needed. if the free 
      # blocks drop below this, cleaning kicks in
-     Minimum free blocks percentage = 5,
+     Minimum free blocks percentage = 14,
 
      # vp - a simple read-modify-erase-write policy = 1 (no longer supported)
      # vp - osr write policy = 2

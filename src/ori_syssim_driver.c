@@ -68,6 +68,10 @@ static SysTime now = 0;   /* current time */
 static SysTime next_event = -1; /* next event */
 static int completed = 0; /* last request was completed */
 static Stat st;
+static Stat wst;
+static Stat rst;
+static Stat wstp;
+static Stat rstp;
 
 
 void
@@ -79,6 +83,14 @@ panic(const char *s)
 
 
 void
+add_statistics_page(Stat *s, int p, double x)
+{
+  s->n+=p;
+  s->sum += x;
+  s->sqr += x*x;
+}
+
+void
 add_statistics(Stat *s, double x)
 {
   s->n++;
@@ -86,16 +98,40 @@ add_statistics(Stat *s, double x)
   s->sqr += x*x;
 }
 
+
 void
-print_statistics(Stat *s, const char *title)
+print_statistics(Stat *s, Stat *ws, Stat *rs,Stat *wsp, Stat *rsp, const char *title)
 {
   double avg, std;
+  double wavg, wstd;
+  double ravg, rstd;
+  double wpavg, wpstd;
+  double rpavg, rpstd;
 
   avg = s->sum/s->n;
   std = sqrt((s->sqr - 2*avg*s->sum + s->n*avg*avg) / s->n);
-  printf("s->sum=%f\n",s->sum );
-  printf("%s: n=%d average=%f std. deviation=%f\n", title, s->n, avg, std);
+
+  wavg = ws->sum/ws->n;
+  wstd = sqrt((ws->sqr - 2*wavg*ws->sum + ws->n*wavg*wavg) / ws->n);
+
+  wpavg = wsp->sum/wsp->n;
+  wpstd = sqrt((wsp->sqr - 2*wpavg*wsp->sum + wsp->n*wpavg*wpavg) / wsp->n);
+
+  ravg = rs->sum/rs->n;
+  rstd = sqrt((rs->sqr - 2*ravg*rs->sum + rs->n*ravg*ravg) / rs->n);
+
+  rpavg = rsp->sum/rsp->n;
+  rpstd = sqrt((rsp->sqr - 2*rpavg*rsp->sum + rsp->n*rpavg*rpavg) / rsp->n);
+
+  printf("\nall %s: n=%d average=%f std. deviation=%f\n", title, s->n, avg, std);
+
+  printf("write %s: n=%d average=%f std. deviation=%f\n", title, ws->n, wavg, wstd);
+  printf("write_page %s: n=%d average=%f std. deviation=%f\n", title, wsp->n, wpavg, wpstd);
+
+  printf("read %s: n=%d average=%f std. deviation=%f\n", title, rs->n, ravg, rstd);
+  printf("read_page %s: n=%d average=%f std. deviation=%f\n", title, rsp->n, rpavg, rpstd);
 }
+
 
 
 /*
@@ -127,7 +163,22 @@ syssim_report_completion(SysTime t, struct disksim_request *r, void *ctx)
 {
   completed = 1;
   now = t;
-  add_statistics(&st, t - r->start); 
+  alln++;
+  if(alln > (int)((double)MAXREQ*0.6))
+  {
+    //add_statistics_page(&st, r->bytecount/4096, t - r->start);
+    add_statistics(&st, t - r->start);
+    if(r->flags == 0)
+    {
+      add_statistics_page(&wstp, r->bytecount/4096, t - r->start);
+      add_statistics(&wst, t - r->start);
+    }
+    else if(r->flags == 1)
+    {
+      add_statistics_page(&rstp, r->bytecount/4096, t - r->start);
+      add_statistics(&rst, t - r->start);
+    }
+  }
 }
 
 int
@@ -140,18 +191,20 @@ main(int argc, char *argv[])
   struct disksim_interface *disksim;
 
   /*add*/
-  FILE *fread = fopen("/home/osnet/Financial1forssd_asu=0_cut8.txt","r");
+  //FILE *fread = fopen("/home/osnet/trace/Financial2forssd_cut.txt","r");
+  lpb_ppn = fopen("/home/osnet/disksim_blas_lpb/lpb_ppn1.txt","w");
+  lpb_lpn = fopen("/home/osnet/disksim_blas_lpb/lpb_lpn1.txt","w");
  /*add end*/
 
-  if (argc != 4 || (nsectors = atoi(argv[3])) <= 0) {
-    fprintf(stderr, "usage: %s <param file> <output file> <#sectors>\n",
+  if (argc != 5 || (nsectors = atoi(argv[3])) <= 0) {
+    fprintf(stderr, "usage: %s <param file> <output file> <#sectors> <trace>\n",
       argv[0]);
     exit(1);
   }
 
   if (stat(argv[1], &buf) < 0)
    panic(argv[1]);
- 
+  FILE *fread = fopen(argv[4],"r");
   disksim = disksim_interface_initialize(argv[1], 
            argv[2],
            syssim_report_completion,
@@ -183,7 +236,6 @@ main(int argc, char *argv[])
         r->blkno = blnum;
         r->bytecount = size * 512;  // ssd 4096
         completed = 0;
-
         disksim_interface_request_arrive(disksim, now, r);
 
         /* Process events until this I/O is completed */
@@ -238,6 +290,14 @@ main(int argc, char *argv[])
   disksim_interface_shutdown(disksim, now);
 
   print_statistics(&st, "response time");
+
+  fclose(lpb_lpn);
+  printf("lpb_lpn\n");
+  fclose(lpb_ppn);
+  printf("lpb_ppn\n");
+  fclose(fread);
+  printf("fread\n");
+
 
   exit(0);
 }

@@ -46,4 +46,5 @@ ssd.o: ssd.c /usr/include/stdc-predef.h ssd.h ../src//disksim_global.h \
  /usr/lib/gcc/i686-linux-gnu/4.8/include/stdint.h /usr/include/stdint.h \
  /usr/include/i386-linux-gnu/bits/wchar.h ../src//disksim_bus.h \
  ../src//config.h ssd_timing.h ssd_clean.h modules/ssdmodel_ssd_param.h \
- ssd_gang.h ssd_init.h
+ ssd_gang.h ssd_init.h ../src//syssim_driver.h \
+ ../src//disksim_interface.h

@@ -50,8 +50,35 @@ typedef	double SysTime;		/* system time in seconds.usec */
 /* In this example, system time is in seconds since initialization */
 // #define SYSSIMTIME_TO_MS(syssimtime)    (syssimtime*1e3)
 // #define MS_TO_SYSSIMTIME(curtime)       (curtime/1e3)
+typedef struct Hint_page //all dirty page
+{
+  unsigned type; // NF/TF/RP
+  unsigned page_num;
+  double predict_time;
+  struct Hint_page *prev, *next;
+} Hint_page;
 
+typedef struct Hint_Queue
+{
+  unsigned count; // number flush array offset
+  long long int numberOfFrames; // total number of frames
+  Hint_page *front, *rear;
+} Hint_Queue;
 
+struct Hint_Queue *global_Hint_Queue;
+FILE * outputfd;
+FILE * outputssd;
+FILE * outputchannel;
+FILE * iniwrite;
+
+typedef struct RW_count
+{
+  unsigned page_num; // number flush array offset
+  unsigned r_count;
+  unsigned w_count;
+} RW_count;
+
+struct RW_count *page_RW_count;
 
 
 /* exported by syssim_driver.c */

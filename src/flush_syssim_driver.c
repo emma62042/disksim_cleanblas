@@ -47,6 +47,7 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <sys/time.h>
+#include <assert.h>
 #include <unistd.h>
 
 #include "syssim_driver.h"
@@ -66,7 +67,7 @@ double Ref_temp = 0;
 double Ref_diff = 0,diff = 0,diff1 = 0;
 double Ref_dr = 0,dr = 0;
 static float flush_count = 1024.0;
-static float Mem = 131072.0;//202025.0;
+static float Mem = 65535.0;//202025.0;
 static float dirty_ratio = 0.4;
 static float dirty_count = 0.0;
 static double Hitcount = 0.0,Sumcount = 0.0;
@@ -79,6 +80,8 @@ long long int count_to_buffer = 0;
 #define BLOCK 4096
 #define SECTOR  512
 #define BLOCK2SECTOR  (BLOCK/SECTOR)
+
+FILE *info;
 
 typedef struct  {
   int n;
@@ -144,10 +147,13 @@ void write_back(Queue* queue , FILE *fwrite, struct disksim_interface *disksim, 
   int extra_flush_Number = 1;
   QNode *current_Point = queue->rear;
   if(on == 1){
+    int ch=0;
+    fprintf(info, "write_back dirty_count=%lf\n",dirty_count);
     //fprintf(fwrite,"write_back\n");
     while(flush_Number < 1024) {
+      ch++;
       if(current_Point->Dirty == 1 ) {
-        printf(" if(current_Point->Dirty == 1 ) \n");
+        //printf(" if(current_Point->Dirty == 1 ) \n");
         current_Point->write_type = 0;
         struct disksim_request *r = malloc(sizeof(struct disksim_request));
         r->start = now;
@@ -155,14 +161,15 @@ void write_back(Queue* queue , FILE *fwrite, struct disksim_interface *disksim, 
         r->devno = current_Point->devno;
         r->blkno = current_Point->blockNumber;
         r->bytecount = (current_Point->size) * 512;  // ssd 4096
+        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point->devno,current_Point->blockNumber,current_Point->size,current_Point->write_type);
         disksim_interface_request_arrive(disksim, now, r);
         while(next_event >= 0) {
           now = next_event;
           next_event = -1;
           disksim_interface_internal_event(disksim, now, 0);
         }
-        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point->devno,current_Point->blockNumber,current_Point->size,current_Point->write_type);
-        printf("after while(next_event >= 0) {\n");
+        
+        //printf("after while(next_event >= 0) {\n");
        // fprintf(fwrite,"%ld\t%d\n",current_Point->blockNumber,current_Point->write_type);
         current_Point->Dirty = 0;
         //printf("flush_1 = %d\n",current_Point->blockNumber);
@@ -175,6 +182,8 @@ void write_back(Queue* queue , FILE *fwrite, struct disksim_interface *disksim, 
         else if(current_Point == queue->front && current_Point->Dirty == 0 ) 
         {
           printf("(current_Point == queue->front && current_Point->Dirty == 0 ) break;\n");
+          fprintf(info, "dirty_count = %lf | (current_Point == queue->front && current_Point->Dirty == 0 ) break;\n", dirty_count);
+          assert(0);
           break;
         }
         else if(current_Point == NULL) 
@@ -183,10 +192,16 @@ void write_back(Queue* queue , FILE *fwrite, struct disksim_interface *disksim, 
           break;
         }
       }
+      else if(current_Point == queue->front && current_Point->Dirty == 0 ) 
+      {
+        printf("111(current_Point == queue->front && current_Point->Dirty == 0 ) break;\n");
+        assert(0);
+        break;
+      }
       else
       {
         current_Point = current_Point->prev;
-        printf("else (current_Point->Dirty == 1 ) {\n");
+        //printf("else (current_Point->Dirty == 1 ) |ch=%d {\n",ch);
       }
     }
   }else{
@@ -272,6 +287,7 @@ void period_write_back(Hash *hash , Queue* queue , FILE *fwrite , struct disksim
         r->devno = current_Point2->devno;
         r->blkno = current_Point2->blockNumber;
         r->bytecount = (current_Point2->size) * 512;  // ssd 4096
+        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point2->devno,current_Point2->blockNumber,current_Point2->size,current_Point2->write_type);
         disksim_interface_request_arrive(disksim, now, r);
         while(next_event >= 0) {
           now = next_event;
@@ -279,7 +295,7 @@ void period_write_back(Hash *hash , Queue* queue , FILE *fwrite , struct disksim
           disksim_interface_internal_event(disksim, now, 0);
         }
 
-        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point2->devno,current_Point2->blockNumber,current_Point2->size,current_Point2->write_type);
+        
         current_Point2->Dirty = 0;
         dirty_count -=1.0;
         global_flush_Point = current_Point2;
@@ -458,13 +474,14 @@ void replacement(Queue* queue , Hash* hash , FILE *fwrite , unsigned incoming_bl
         r->bytecount = (current_Point2->size) * 512;  // ssd 4096
         current_Point2->Dirty = 0;
         dirty_count -=1.0;
+        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point2->devno,current_Point2->blockNumber,current_Point2->size,current_Point2->write_type);
         disksim_interface_request_arrive(disksim, now, r);
         while(next_event >= 0) {
           now = next_event;
           next_event = -1;
           disksim_interface_internal_event(disksim, now, 0);
         }
-        fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,current_Point2->devno,current_Point2->blockNumber,current_Point2->size,current_Point2->write_type);        
+                
   }
   clean_replace = 1;
   replace_time = now;
@@ -563,6 +580,7 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
   // the page is not in cache, bring it
   if ( reqPage == NULL ) {
     Enqueue( queue, hash, blockNumber);
+    //fprintf(fwrite, "ReferencePage now=%lf\n", now);
     if(Req_type==1)
     {
       r->start = now;
@@ -570,13 +588,14 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
       r->devno = Req_devno;
       r->blkno = blockNumber;
       r->bytecount = Req_size * 512;  // ssd 4096
+      fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,Req_devno,blockNumber,Req_size,Req_type);
       disksim_interface_request_arrive(disksim, now, r);
       while(next_event >= 0) {
         now = next_event;
         next_event = -1;
         disksim_interface_internal_event(disksim, now, 0);
       }
-      fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,Req_devno,blockNumber,Req_size,Req_type);
+      //fprintf(fwrite,"%lf\t%ld\t%ld\t%ld\t%ld\n",now,Req_devno,blockNumber,Req_size,Req_type);
     }
     QNode *reqPage = hash->array[ blockNumber ];
     reqPage->Req_type = Req_type;
@@ -591,8 +610,8 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
       dirty_count += 1.0;
     }
   } else if (reqPage == queue->front){ // page is there and at front, change pointer
-    if(Req_type == 0){  
-      if(reqPage->Req_type == 1 ){  
+    if(Req_type == 0){ //write 
+      if(reqPage->Req_type == 1 ){  //ori read
         reqPage->Req_type = Req_type;  
         reqPage->Dirty = 1;
         dirty_count += 1.0;
@@ -603,7 +622,7 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
           dirty_count += 1.0; 
         }
       }       
-    }else{                
+    }else{ //read               
       if(reqPage->Req_type == 1 ){    
         reqPage->Req_type = Req_type;
       }else{              
@@ -628,7 +647,6 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
     }else{                 //if type of new request is 1(read) , and last state is 1(read) , it's clean page
       if(reqPage->Req_type == 1 ){    
         reqPage->Req_type = Req_type;
-        reqPage->Dirty = 0;
       }else{               //if type of new request is 1(read) , but last state is 0(write) , it's dirty page
         reqPage->Req_type = Req_type;   
       }
@@ -663,17 +681,17 @@ void ReferencePage( Queue* queue, Hash* hash, double Req_time, long int Req_devn
       Ref_temp = 1 ;
       Ref_dr = now - Ref_diff;
       if( Ref_dr >=0 ){
-             printf("before pwh 0\n");
+             //printf("before pwh 0\n");
 
        period_write_back(hash, queue ,fwrite,disksim,0);
-             printf("after pwh 0\n");
+             //printf("after pwh 0\n");
 
       }
       if((dirty_count/Mem) >= (dirty_ratio - 0.01)) {
-             printf("before wh 0\n");
+             //printf("before wh 0\n");
 
           write_back(queue ,fwrite,disksim,0);
-             printf("after wh 0\n");
+             //printf("after wh 0\n");
 
       }
     }
@@ -770,8 +788,11 @@ int main(int argc, char *argv[]) {
   //printf("tv_sec:%ld\n",Global_time);
   printf("<<<ssd_ARR=%d>>>\n",ssd_ARR);
   FILE *fwrite = fopen("/home/osnet/disksim_cleanblas/flush.txt","w");
-  FILE *fread = fopen("/home/osnet/num_iozone.txt","r");
+  //FILE *fread = fopen("/home/osnet/num_iozone.txt","r");
+  //FILE *fread = fopen("/home/osnet/trace/Financial1forssd_cut.txt","r");
+  FILE *fread = fopen("/home/osnet/Downloads/run1_gcc.txt","r");
   //FILE *evict_fread = fopen("/home/osnet/Desktop/disksim2/src/BPLRU/iozone/2048","r");
+  info = fopen("/home/osnet/disksim_cleanblas/info.txt","w");
 
   Queue *q = createQueue( Mem ); // Let cache can hold x pages
   Hash *hash = createHash( 100000000 );// Let 10 different pages can be requested (pages to be referenced are numbered from 0 to 9 )
@@ -830,9 +851,9 @@ int main(int argc, char *argv[]) {
             else break;
           }
           if((dirty_count/Mem) >= dirty_ratio){ //flush_1 number of dirty more than dirty ratio , exe flush 
-             printf("before wh\n");
+             //printf("before wh\n");
              write_back(q ,fwrite,disksim,1);
-             printf("after wh\n");
+             //printf("after wh\n");
             QNode *block_count_Point = q->rear;
             int i = 0;
             for(i = 0 ; i < 1000000 ; i++) sum_block_count[i] = 0;
@@ -852,9 +873,9 @@ int main(int argc, char *argv[]) {
          // printf("test_count2 = %d\n", test_count2 );
           if( dr >= 0) { // per 5 second to wake up 
             temp = 0;
-            printf("before pwh\n");
+            //printf("before pwh\n");
             period_write_back(hash, q,fwrite,disksim,1);
-            printf("after pwh\n");
+            //printf("after pwh\n");
             QNode *block_count_Point = q->rear;
             int i = 0;
             for(i = 0 ; i < 1000000 ; i++) sum_block_count[i] = 0;
